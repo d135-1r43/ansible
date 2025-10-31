@@ -1,0 +1,181 @@
+---
+- name: Setup Development Environment with Neovim, Oh My Zsh, and Zellij
+  hosts: localhost
+  become: yes
+  vars:
+    user_home: "{{ lookup('env', 'HOME') }}"
+    user_name: "{{ lookup('env', 'USER') }}"
+
+  tasks:
+    # ===== Install Zsh =====
+    - name: Install Zsh
+      package:
+        name: zsh
+        state: present
+      when: ansible_os_family in ['Debian', 'RedHat']
+
+    - name: Install Zsh (macOS)
+      homebrew:
+        name: zsh
+        state: present
+      when: ansible_os_family == 'Darwin'
+      become: no
+
+    - name: Change default shell to Zsh
+      user:
+        name: "{{ user_name }}"
+        shell: /bin/zsh
+      become: yes
+
+    # ===== Install Oh My Zsh =====
+    - name: Check if Oh My Zsh is installed
+      stat:
+        path: "{{ user_home }}/.oh-my-zsh"
+      register: ohmyzsh_stat
+      become: no
+
+    - name: Install Oh My Zsh
+      shell: sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+      args:
+        creates: "{{ user_home }}/.oh-my-zsh"
+      become: no
+      when: not ohmyzsh_stat.stat.exists
+
+    # ===== Install Neovim =====
+    - name: Install Neovim dependencies (Debian/Ubuntu)
+      package:
+        name:
+          - git
+          - curl
+          - build-essential
+          - ripgrep
+          - fd-find
+        state: present
+      when: ansible_os_family == 'Debian'
+
+    - name: Install Neovim dependencies (RedHat/Fedora)
+      package:
+        name:
+          - git
+          - curl
+          - gcc
+          - gcc-c++
+          - make
+          - ripgrep
+          - fd-find
+        state: present
+      when: ansible_os_family == 'RedHat'
+
+    - name: Install Neovim dependencies (macOS)
+      homebrew:
+        name:
+          - git
+          - curl
+          - ripgrep
+          - fd
+        state: present
+      when: ansible_os_family == 'Darwin'
+      become: no
+
+    - name: Install Neovim (Debian/Ubuntu)
+      package:
+        name: neovim
+        state: present
+      when: ansible_os_family == 'Debian'
+
+    - name: Install Neovim (RedHat/Fedora)
+      package:
+        name: neovim
+        state: present
+      when: ansible_os_family == 'RedHat'
+
+    - name: Install Neovim (macOS)
+      homebrew:
+        name: neovim
+        state: present
+      when: ansible_os_family == 'Darwin'
+      become: no
+
+    # ===== Install LazyVim =====
+    - name: Check if Neovim config exists
+      stat:
+        path: "{{ user_home }}/.config/nvim"
+      register: nvim_config_stat
+      become: no
+
+    - name: Backup existing Neovim config
+      command: mv {{ user_home }}/.config/nvim {{ user_home }}/.config/nvim.backup.{{ ansible_date_time.epoch }}
+      when: nvim_config_stat.stat.exists
+      become: no
+
+    - name: Backup existing Neovim data
+      command: mv {{ user_home }}/.local/share/nvim {{ user_home }}/.local/share/nvim.backup.{{ ansible_date_time.epoch }}
+      args:
+        removes: "{{ user_home }}/.local/share/nvim"
+      become: no
+
+    - name: Backup existing Neovim state
+      command: mv {{ user_home }}/.local/state/nvim {{ user_home }}/.local/state/nvim.backup.{{ ansible_date_time.epoch }}
+      args:
+        removes: "{{ user_home }}/.local/state/nvim"
+      become: no
+
+    - name: Backup existing Neovim cache
+      command: mv {{ user_home }}/.cache/nvim {{ user_home }}/.cache/nvim.backup.{{ ansible_date_time.epoch }}
+      args:
+        removes: "{{ user_home }}/.cache/nvim"
+      become: no
+
+    - name: Clone LazyVim starter configuration
+      git:
+        repo: https://github.com/LazyVim/starter
+        dest: "{{ user_home }}/.config/nvim"
+        depth: 1
+      become: no
+
+    - name: Remove .git folder from LazyVim config
+      file:
+        path: "{{ user_home }}/.config/nvim/.git"
+        state: absent
+      become: no
+
+    # ===== Install Zellij =====
+    - name: Install Zellij (Debian/Ubuntu)
+      block:
+        - name: Download Zellij binary
+          get_url:
+            url: https://github.com/zellij-org/zellij/releases/latest/download/zellij-x86_64-unknown-linux-musl.tar.gz
+            dest: /tmp/zellij.tar.gz
+            mode: '0644'
+
+        - name: Extract Zellij binary
+          unarchive:
+            src: /tmp/zellij.tar.gz
+            dest: /usr/local/bin
+            remote_src: yes
+            mode: '0755'
+      when: ansible_os_family in ['Debian', 'RedHat']
+
+    - name: Install Zellij (macOS)
+      homebrew:
+        name: zellij
+        state: present
+      when: ansible_os_family == 'Darwin'
+      become: no
+
+    # ===== Post-installation messages =====
+    - name: Display completion message
+      debug:
+        msg:
+          - "===== Installation Complete ====="
+          - "Zsh installed and set as default shell"
+          - "Oh My Zsh installed at {{ user_home }}/.oh-my-zsh"
+          - "Neovim installed with LazyVim configuration"
+          - "Zellij installed"
+          - ""
+          - "Next steps:"
+          - "1. Log out and log back in for shell changes to take effect"
+          - "2. Run 'nvim' to let LazyVim install plugins automatically"
+          - "3. Run 'zellij' to start using Zellij terminal multiplexer"
+          - ""
+          - "Note: Your old Neovim configs have been backed up with timestamp"
