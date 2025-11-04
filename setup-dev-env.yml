@@ -1,6 +1,6 @@
 ---
 - name: Setup Development Environment with Neovim, Oh My Zsh, and Zellij
-  hosts: localhost
+  hosts: servers
   become: yes
   vars:
     user_home: "{{ lookup('env', 'HOME') }}"
