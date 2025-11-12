@@ -75,17 +75,33 @@
       when: ansible_os_family == 'Darwin'
       become: no
 
-    - name: Install Neovim (Debian/Ubuntu)
+    - name: Remove old Neovim if installed (Debian/Ubuntu)
       package:
         name: neovim
-        state: present
+        state: absent
       when: ansible_os_family == 'Debian'
 
-    - name: Install Neovim (RedHat/Fedora)
-      package:
-        name: neovim
-        state: present
-      when: ansible_os_family == 'RedHat'
+    - name: Download latest Neovim tarball (Linux)
+      get_url:
+        url: https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz
+        dest: /tmp/nvim-linux-x86_64.tar.gz
+        mode: '0644'
+      when: ansible_os_family in ['Debian', 'RedHat']
+
+    - name: Extract Neovim tarball (Linux)
+      unarchive:
+        src: /tmp/nvim-linux-x86_64.tar.gz
+        dest: /opt
+        remote_src: yes
+      when: ansible_os_family in ['Debian', 'RedHat']
+
+    - name: Create symlink for Neovim (Linux)
+      file:
+        src: /opt/nvim-linux-x86_64/bin/nvim
+        dest: /usr/local/bin/nvim
+        state: link
+        force: yes
+      when: ansible_os_family in ['Debian', 'RedHat']
 
     - name: Install Neovim (macOS)
       homebrew:
