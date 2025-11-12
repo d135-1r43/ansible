@@ -3,8 +3,8 @@
   hosts: servers
   become: yes
   vars:
-    user_home: "{{ lookup('env', 'HOME') }}"
-    user_name: "{{ lookup('env', 'USER') }}"
+    user_home: "{{ ansible_env.HOME }}"
+    user_name: "{{ ansible_user_id }}"
 
   tasks:
     # ===== Install Zsh =====
@@ -81,26 +81,57 @@
         state: absent
       when: ansible_os_family == 'Debian'
 
-    - name: Download latest Neovim tarball (Linux)
-      get_url:
-        url: https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz
-        dest: /tmp/nvim-linux-x86_64.tar.gz
-        mode: '0644'
-      when: ansible_os_family in ['Debian', 'RedHat']
+    - name: Install Neovim build dependencies (Debian/Ubuntu)
+      package:
+        name:
+          - ninja-build
+          - gettext
+          - cmake
+          - unzip
+          - curl
+        state: present
+      when: ansible_os_family == 'Debian'
 
-    - name: Extract Neovim tarball (Linux)
-      unarchive:
-        src: /tmp/nvim-linux-x86_64.tar.gz
-        dest: /opt
-        remote_src: yes
-      when: ansible_os_family in ['Debian', 'RedHat']
+    - name: Install Neovim build dependencies (RedHat/Fedora)
+      package:
+        name:
+          - ninja-build
+          - gettext
+          - cmake
+          - unzip
+          - curl
+        state: present
+      when: ansible_os_family == 'RedHat'
 
-    - name: Create symlink for Neovim (Linux)
+    - name: Remove old Neovim installation
       file:
-        src: /opt/nvim-linux-x86_64/bin/nvim
-        dest: /usr/local/bin/nvim
-        state: link
-        force: yes
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /usr/local/bin/nvim
+        - /opt/nvim-linux-x86_64
+        - /tmp/nvim-linux-x86_64.tar.gz
+      when: ansible_os_family in ['Debian', 'RedHat']
+
+    - name: Clone Neovim repository
+      git:
+        repo: https://github.com/neovim/neovim.git
+        dest: /tmp/neovim
+        version: stable
+        depth: 1
+      when: ansible_os_family in ['Debian', 'RedHat']
+
+    - name: Build and install Neovim from source
+      shell: |
+        cd /tmp/neovim
+        make CMAKE_BUILD_TYPE=RelWithDebInfo
+        make install
+      when: ansible_os_family in ['Debian', 'RedHat']
+
+    - name: Clean up Neovim source
+      file:
+        path: /tmp/neovim
+        state: absent
       when: ansible_os_family in ['Debian', 'RedHat']
 
     - name: Install Neovim (macOS)
