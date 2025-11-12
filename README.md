@@ -24,69 +24,40 @@ This Ansible playbook automatically installs and configures:
 
 ## Usage
 
-### Local Installation
-
-Run the playbook on your local machine:
-
-```bash
-ansible-playbook setup-dev-env.yml --ask-become-pass
-```
-
-The `--ask-become-pass` flag will prompt you for your sudo password.
-
 ### Remote Server Installation
 
-To install on remote servers, you'll need to configure an inventory file.
+The playbook is configured to run against remote servers defined in `hosts.ini`.
 
-1. **Create an inventory file** (`hosts.ini`):
+1. **Configure your inventory file** (`hosts.ini`):
    ```ini
-   [dev_servers]
-   server1 ansible_host=192.168.1.10 ansible_user=your_username
-   server2 ansible_host=192.168.1.11 ansible_user=your_username
-
-   [dev_servers:vars]
-   ansible_python_interpreter=/usr/bin/python3
+   [servers]
+   server1 ansible_host=server1.example.com ansible_user=root
+   server2 ansible_host=192.168.1.10 ansible_user=root
    ```
 
-2. **Update the playbook** to target your inventory group:
-
-   Edit `setup-dev-env.yml` and change:
-   ```yaml
-   hosts: localhost
-   ```
-   to:
-   ```yaml
-   hosts: dev_servers
-   ```
-
-3. **Run the playbook against remote servers**:
+2. **Run the playbook against all servers**:
    ```bash
-   # Using password authentication
-   ansible-playbook -i hosts.ini setup-dev-env.yml --ask-become-pass -k
-
-   # Using SSH key authentication (recommended)
-   ansible-playbook -i hosts.ini setup-dev-env.yml --ask-become-pass
+   # Run on all servers
+   ansible-playbook -i hosts.ini setup-dev-env.yml
 
    # Target specific server
-   ansible-playbook -i hosts.ini setup-dev-env.yml --ask-become-pass --limit server1
+   ansible-playbook -i hosts.ini setup-dev-env.yml --limit server1
    ```
 
    **Flags explained:**
    - `-i hosts.ini` - Specifies the inventory file
-   - `--ask-become-pass` - Prompts for sudo password on remote server
-   - `-k` or `--ask-pass` - Prompts for SSH password (if not using SSH keys)
    - `--limit server1` - Run only on specific host(s)
 
-4. **For multiple servers with different users**, create a more detailed inventory:
+3. **For multiple server groups**, create a more detailed inventory:
    ```ini
    [webservers]
-   web1 ansible_host=10.0.0.1 ansible_user=ubuntu
-   web2 ansible_host=10.0.0.2 ansible_user=admin
+   web1 ansible_host=10.0.0.1 ansible_user=root
+   web2 ansible_host=10.0.0.2 ansible_user=root
 
    [databases]
-   db1 ansible_host=10.0.0.10 ansible_user=centos
+   db1 ansible_host=10.0.0.10 ansible_user=root
 
-   [dev_servers:children]
+   [servers:children]
    webservers
    databases
    ```
@@ -95,18 +66,20 @@ To install on remote servers, you'll need to configure an inventory file.
 
 - **SSH Key Setup**: For easier remote access, set up SSH key authentication:
   ```bash
-  ssh-copy-id your_username@server_ip
+  ssh-copy-id root@server_ip
   ```
 
 - **Test Connectivity**: Before running the playbook, test your connection:
   ```bash
-  ansible -i hosts.ini dev_servers -m ping
+  ansible -i hosts.ini servers -m ping
   ```
 
 - **Dry Run**: Test what would be changed without making changes:
   ```bash
   ansible-playbook -i hosts.ini setup-dev-env.yml --check
   ```
+
+- **Build Time**: First run will take longer (5-10 minutes per server) as Neovim is built from source. Subsequent runs will be faster.
 
 ## What Gets Installed
 
@@ -117,7 +90,9 @@ To install on remote servers, you'll need to configure an inventory file.
 - Location: `~/.oh-my-zsh`
 
 ### Neovim + LazyVim
-- Installs Neovim and required dependencies (git, curl, ripgrep, fd)
+- **Linux**: Builds Neovim from source (stable branch) for maximum compatibility across different distributions and glibc versions
+- **macOS**: Installs latest Neovim via Homebrew
+- Installs required dependencies (git, curl, ripgrep, fd-find, build tools)
 - Clones LazyVim starter configuration
 - Backs up any existing Neovim configuration with timestamps
 - Location: `~/.config/nvim`
@@ -179,3 +154,9 @@ Run `:Lazy` inside Neovim and press `I` to install plugins manually.
 
 **Permission issues:**
 Make sure you run the playbook with `--ask-become-pass` flag.
+
+**Neovim build takes a long time:**
+Building Neovim from source can take 5-10 minutes depending on your system. This is normal and ensures compatibility with your system's libraries.
+
+**GLIBC version errors:**
+The playbook now builds Neovim from source on Linux systems, which eliminates GLIBC compatibility issues that occur with pre-built binaries.
