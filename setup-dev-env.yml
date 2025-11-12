@@ -30,14 +30,12 @@
     # ===== Install Oh My Zsh =====
     - name: Check if Oh My Zsh is installed
       stat:
-        path: "{{ user_home }}/.oh-my-zsh"
+        path: "~/.oh-my-zsh"
       register: ohmyzsh_stat
       become: no
 
     - name: Install Oh My Zsh
       shell: sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
-      args:
-        creates: "{{ user_home }}/.oh-my-zsh"
       become: no
       when: not ohmyzsh_stat.stat.exists
 
