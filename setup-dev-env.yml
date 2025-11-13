@@ -18,6 +18,15 @@
         name: "{{ user_name }}"
         shell: /bin/zsh
 
+    # ===== Deploy Git Configuration =====
+    - name: Copy .gitconfig to user home directory
+      copy:
+        src: .gitconfig
+        dest: "{{ user_home }}/.gitconfig"
+        owner: "{{ user_name }}"
+        mode: '0644'
+      become: no
+
     # ===== Install Oh My Zsh =====
     - name: Check if Oh My Zsh is installed
       stat:
@@ -83,14 +92,19 @@
         state: present
       when: ansible_os_family == 'RedHat'
 
-    - name: Remove old Neovim installation
+    - name: Check if Neovim is already installed
+      stat:
+        path: /usr/local/bin/nvim
+      register: nvim_installed
+
+    - name: Remove old Neovim installation artifacts
       file:
         path: "{{ item }}"
         state: absent
       loop:
-        - /usr/local/bin/nvim
         - /opt/nvim-linux-x86_64
         - /tmp/nvim-linux-x86_64.tar.gz
+      when: not nvim_installed.stat.exists
 
     - name: Clone Neovim repository
       git:
@@ -98,17 +112,20 @@
         dest: /tmp/neovim
         version: stable
         depth: 1
+      when: not nvim_installed.stat.exists
 
     - name: Build and install Neovim from source
       shell: |
         cd /tmp/neovim
         make CMAKE_BUILD_TYPE=RelWithDebInfo
         make install
+      when: not nvim_installed.stat.exists
 
     - name: Clean up Neovim source
       file:
         path: /tmp/neovim
         state: absent
+      when: not nvim_installed.stat.exists
 
     # ===== Install LazyVim =====
     - name: Check if Neovim config exists
