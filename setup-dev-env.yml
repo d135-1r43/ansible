@@ -12,20 +12,11 @@
       package:
         name: zsh
         state: present
-      when: ansible_os_family in ['Debian', 'RedHat']
-
-    - name: Install Zsh (macOS)
-      homebrew:
-        name: zsh
-        state: present
-      when: ansible_os_family == 'Darwin'
-      become: no
 
     - name: Change default shell to Zsh
       user:
         name: "{{ user_name }}"
         shell: /bin/zsh
-      become: yes
 
     # ===== Install Oh My Zsh =====
     - name: Check if Oh My Zsh is installed
@@ -64,17 +55,6 @@
         state: present
       when: ansible_os_family == 'RedHat'
 
-    - name: Install Neovim dependencies (macOS)
-      homebrew:
-        name:
-          - git
-          - curl
-          - ripgrep
-          - fd
-        state: present
-      when: ansible_os_family == 'Darwin'
-      become: no
-
     - name: Remove old Neovim if installed (Debian/Ubuntu)
       package:
         name: neovim
@@ -111,7 +91,6 @@
         - /usr/local/bin/nvim
         - /opt/nvim-linux-x86_64
         - /tmp/nvim-linux-x86_64.tar.gz
-      when: ansible_os_family in ['Debian', 'RedHat']
 
     - name: Clone Neovim repository
       git:
@@ -119,27 +98,17 @@
         dest: /tmp/neovim
         version: stable
         depth: 1
-      when: ansible_os_family in ['Debian', 'RedHat']
 
     - name: Build and install Neovim from source
       shell: |
         cd /tmp/neovim
         make CMAKE_BUILD_TYPE=RelWithDebInfo
         make install
-      when: ansible_os_family in ['Debian', 'RedHat']
 
     - name: Clean up Neovim source
       file:
         path: /tmp/neovim
         state: absent
-      when: ansible_os_family in ['Debian', 'RedHat']
-
-    - name: Install Neovim (macOS)
-      homebrew:
-        name: neovim
-        state: present
-      when: ansible_os_family == 'Darwin'
-      become: no
 
     # ===== Install LazyVim =====
     - name: Check if Neovim config exists
@@ -185,28 +154,18 @@
       become: no
 
     # ===== Install Zellij =====
-    - name: Install Zellij (Debian/Ubuntu)
-      block:
-        - name: Download Zellij binary
-          get_url:
-            url: https://github.com/zellij-org/zellij/releases/latest/download/zellij-x86_64-unknown-linux-musl.tar.gz
-            dest: /tmp/zellij.tar.gz
-            mode: '0644'
+    - name: Download Zellij binary
+      get_url:
+        url: https://github.com/zellij-org/zellij/releases/latest/download/zellij-x86_64-unknown-linux-musl.tar.gz
+        dest: /tmp/zellij.tar.gz
+        mode: '0644'
 
-        - name: Extract Zellij binary
-          unarchive:
-            src: /tmp/zellij.tar.gz
-            dest: /usr/local/bin
-            remote_src: yes
-            mode: '0755'
-      when: ansible_os_family in ['Debian', 'RedHat']
-
-    - name: Install Zellij (macOS)
-      homebrew:
-        name: zellij
-        state: present
-      when: ansible_os_family == 'Darwin'
-      become: no
+    - name: Extract Zellij binary
+      unarchive:
+        src: /tmp/zellij.tar.gz
+        dest: /usr/local/bin
+        remote_src: yes
+        mode: '0755'
 
     # ===== Post-installation messages =====
     - name: Display completion message

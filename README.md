@@ -8,19 +8,20 @@ This Ansible playbook automatically installs and configures:
 
 ## Prerequisites
 
-1. **Ansible installed** on your system:
+1. **Ansible installed** on your local control machine:
    ```bash
-   # macOS
-   brew install ansible
-
    # Ubuntu/Debian
    sudo apt update && sudo apt install ansible
 
    # Fedora/RHEL
    sudo dnf install ansible
+
+   # macOS (for running Ansible locally)
+   brew install ansible
    ```
 
-2. **Sudo privileges** (for package installation)
+2. **SSH access to target servers**
+3. **Root privileges** on target servers
 
 ## Usage
 
@@ -90,8 +91,7 @@ The playbook is configured to run against remote servers defined in `hosts.ini`.
 - Location: `~/.oh-my-zsh`
 
 ### Neovim + LazyVim
-- **Linux**: Builds Neovim from source (stable branch) for maximum compatibility across different distributions and glibc versions
-- **macOS**: Installs latest Neovim via Homebrew
+- Builds Neovim from source (stable branch) for maximum compatibility across different distributions and glibc versions
 - Installs required dependencies (git, curl, ripgrep, fd-find, build tools)
 - Clones LazyVim starter configuration
 - Backs up any existing Neovim configuration with timestamps
@@ -118,7 +118,6 @@ The playbook is configured to run against remote servers defined in `hosts.ini`.
 
 ## Supported Platforms
 
-- macOS (with Homebrew)
 - Ubuntu/Debian
 - Fedora/RHEL/CentOS
 
