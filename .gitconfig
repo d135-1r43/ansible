@@ -1,0 +1,23 @@
+[user]
+	email = markus.herhoffer@explore.de
+	name = Markus Herhoffer
+[alias]
+	lg = log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit --decorate 
+	wip = !git add -A && git commit -m WIP
+	unwip = reset --mixed HEAD~1
+	ap = !git add -A && git commit --ammend --no-edit
+	s = status -s
+	pl = pull --ff-only
+	pll = !git pl && git lg @{1}..
+	aliases = config --get-regex alias
+	logpull = log --reverse --no-merges --stat @{1}..
+	diffpull = diff @{1}..
+	fix = !git diff --name-only | uniq | xargs vim
+	sm = submodule update --recursive --remote
+	delrb = push origin --delete
+	fix= !git diff --name-only | uniq | xargs vim
+[push]
+	default = simple
+	autoSetupRemote = true
+[init]
+	defaultBranch = main
