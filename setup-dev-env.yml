@@ -171,9 +171,13 @@
       become: no
 
     # ===== Install Zellij =====
+    - name: Set Zellij architecture
+      set_fact:
+        zellij_arch: "{{ 'aarch64' if ansible_architecture == 'aarch64' else 'x86_64' }}"
+
     - name: Download Zellij binary
       get_url:
-        url: https://github.com/zellij-org/zellij/releases/latest/download/zellij-x86_64-unknown-linux-musl.tar.gz
+        url: "https://github.com/zellij-org/zellij/releases/latest/download/zellij-{{ zellij_arch }}-unknown-linux-musl.tar.gz"
         dest: /tmp/zellij.tar.gz
         mode: '0644'
 
