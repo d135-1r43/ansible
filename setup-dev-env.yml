@@ -274,11 +274,30 @@
       set_fact:
         zellij_arch: "{{ 'aarch64' if ansible_architecture == 'aarch64' else 'x86_64' }}"
 
+    - name: Check if Zellij is already installed
+      stat:
+        path: /usr/local/bin/zellij
+      register: zellij_installed
+
+    - name: Get installed Zellij version
+      command: /usr/local/bin/zellij --version
+      register: zellij_current_version
+      changed_when: false
+      failed_when: false
+      when: zellij_installed.stat.exists
+
+    - name: Display current Zellij version
+      debug:
+        msg: "Zellij already installed: {{ zellij_current_version.stdout }}"
+      when: zellij_installed.stat.exists and not (force_update_zellij | default(false) | bool)
+
     - name: Download Zellij binary
       get_url:
         url: "https://github.com/zellij-org/zellij/releases/latest/download/zellij-{{ zellij_arch }}-unknown-linux-musl.tar.gz"
         dest: /tmp/zellij.tar.gz
         mode: '0644'
+        force: yes
+      when: not zellij_installed.stat.exists or (force_update_zellij | default(false) | bool)
 
     - name: Extract Zellij binary
       unarchive:
@@ -286,6 +305,13 @@
         dest: /usr/local/bin
         remote_src: yes
         mode: '0755'
+      when: not zellij_installed.stat.exists or (force_update_zellij | default(false) | bool)
+
+    - name: Clean up Zellij download
+      file:
+        path: /tmp/zellij.tar.gz
+        state: absent
+      when: not zellij_installed.stat.exists or (force_update_zellij | default(false) | bool)
 
     # ===== Post-installation messages =====
     - name: Display completion message
