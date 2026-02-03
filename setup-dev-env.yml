@@ -215,33 +215,43 @@
       when: not nvim_installed.stat.exists
 
     # ===== Install LazyVim =====
-    - name: Check if Neovim config exists
+    - name: Check if LazyVim config exists
       stat:
-        path: "{{ user_home }}/.config/nvim"
-      register: nvim_config_stat
+        path: "{{ user_home }}/.config/nvim/lua/config/lazy.lua"
+      register: lazyvim_config_stat
       become: no
+
+    - name: Skip LazyVim installation if already configured
+      debug:
+        msg: "LazyVim already installed, skipping configuration"
+      when: lazyvim_config_stat.stat.exists
 
     - name: Backup existing Neovim config
       command: mv {{ user_home }}/.config/nvim {{ user_home }}/.config/nvim.backup.{{ ansible_date_time.epoch }}
-      when: nvim_config_stat.stat.exists
+      args:
+        removes: "{{ user_home }}/.config/nvim"
+      when: not lazyvim_config_stat.stat.exists
       become: no
 
     - name: Backup existing Neovim data
       command: mv {{ user_home }}/.local/share/nvim {{ user_home }}/.local/share/nvim.backup.{{ ansible_date_time.epoch }}
       args:
         removes: "{{ user_home }}/.local/share/nvim"
+      when: not lazyvim_config_stat.stat.exists
       become: no
 
     - name: Backup existing Neovim state
       command: mv {{ user_home }}/.local/state/nvim {{ user_home }}/.local/state/nvim.backup.{{ ansible_date_time.epoch }}
       args:
         removes: "{{ user_home }}/.local/state/nvim"
+      when: not lazyvim_config_stat.stat.exists
       become: no
 
     - name: Backup existing Neovim cache
       command: mv {{ user_home }}/.cache/nvim {{ user_home }}/.cache/nvim.backup.{{ ansible_date_time.epoch }}
       args:
         removes: "{{ user_home }}/.cache/nvim"
+      when: not lazyvim_config_stat.stat.exists
       become: no
 
     - name: Clone LazyVim starter configuration
@@ -249,12 +259,14 @@
         repo: https://github.com/LazyVim/starter
         dest: "{{ user_home }}/.config/nvim"
         depth: 1
+      when: not lazyvim_config_stat.stat.exists
       become: no
 
     - name: Remove .git folder from LazyVim config
       file:
         path: "{{ user_home }}/.config/nvim/.git"
         state: absent
+      when: not lazyvim_config_stat.stat.exists
       become: no
 
     # ===== Install Zellij =====
@@ -283,12 +295,12 @@
           - "Automatic security updates configured and enabled"
           - "Zsh installed and set as default shell"
           - "Oh My Zsh installed at {{ user_home }}/.oh-my-zsh"
-          - "Neovim installed with LazyVim configuration"
+          - "Neovim and LazyVim ready (existing installations preserved)"
           - "Zellij installed"
           - ""
           - "Next steps:"
           - "1. Log out and log back in for shell changes to take effect"
-          - "2. Run 'nvim' to let LazyVim install plugins automatically"
+          - "2. Run 'nvim' to use Neovim with LazyVim"
           - "3. Run 'zellij' to start using Zellij terminal multiplexer"
           - ""
-          - "Note: Your old Neovim configs have been backed up with timestamp"
+          - "Note: Existing Neovim configs are preserved and not overwritten"
