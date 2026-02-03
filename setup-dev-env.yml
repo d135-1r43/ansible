@@ -3,8 +3,8 @@
   hosts: servers
   become: yes
   vars:
-    user_home: "{{ ansible_env.HOME }}"
-    user_name: "{{ ansible_user_id }}"
+    user_name: "{{ ansible_user }}"
+    user_home: "{{ '/root' if ansible_user == 'root' else '/home/' + ansible_user }}"
 
   tasks:
     # ===== Install Zsh =====
@@ -12,11 +12,25 @@
       package:
         name: zsh
         state: present
+      when: not (use_shell_pkg | default(false) | bool)
+
+    - name: Install Zsh (shell fallback)
+      shell: dnf install -y zsh
+      args:
+        creates: /usr/bin/zsh
+      when: use_shell_pkg | default(false) | bool
 
     - name: Change default shell to Zsh
       user:
         name: "{{ user_name }}"
         shell: /bin/zsh
+      ignore_errors: yes
+      register: shell_change_result
+
+    - name: Note about shell change for LDAP users
+      debug:
+        msg: "Could not change shell - user may be LDAP/AD managed. Set shell manually or contact your admin."
+      when: shell_change_result is failed
 
     # ===== Deploy Git Configuration =====
     - name: Copy .gitconfig to user home directory
@@ -62,7 +76,11 @@
           - ripgrep
           - fd-find
         state: present
-      when: ansible_os_family == 'RedHat'
+      when: ansible_os_family == 'RedHat' and not (use_shell_pkg | default(false) | bool)
+
+    - name: Install Neovim dependencies (RedHat/Fedora - shell fallback)
+      shell: dnf install -y git curl gcc gcc-c++ make ripgrep fd-find
+      when: ansible_os_family == 'RedHat' and (use_shell_pkg | default(false) | bool)
 
     - name: Remove old Neovim if installed (Debian/Ubuntu)
       package:
@@ -90,7 +108,11 @@
           - unzip
           - curl
         state: present
-      when: ansible_os_family == 'RedHat'
+      when: ansible_os_family == 'RedHat' and not (use_shell_pkg | default(false) | bool)
+
+    - name: Install Neovim build dependencies (RedHat/Fedora - shell fallback)
+      shell: dnf install -y ninja-build gettext cmake unzip curl
+      when: ansible_os_family == 'RedHat' and (use_shell_pkg | default(false) | bool)
 
     - name: Check if Neovim is already installed
       stat:
