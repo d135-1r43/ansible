@@ -3,6 +3,9 @@
 # Imported by setup-dev-env.yml (provisioning) and update-dev-tools.yml (updates only).
 #
 # Variables:
+#   install_missing      - install a tool that is absent (true during provisioning,
+#                          false for update-only runs, which must not attempt a fresh
+#                          Neovim build because build dependencies are not installed here)
 #   force_update_zellij  - reinstall Zellij even if it is already at the latest version
 #   update_neovim        - rebuild Neovim from source when a newer stable release exists
 #   force_update_neovim  - rebuild Neovim from source unconditionally
@@ -48,11 +51,16 @@
 
 - name: Decide whether Neovim needs building
   set_fact:
-    nvim_needs_build: "{{ (not nvim_installed.stat.exists) or (force_update_neovim | default(false) | bool) or (nvim_outdated and (update_neovim | default(false) | bool)) }}"
+    nvim_needs_build: "{{ ((not nvim_installed.stat.exists) and (install_missing | default(true) | bool)) or (force_update_neovim | default(false) | bool) or (nvim_outdated and (update_neovim | default(false) | bool)) }}"
 
 - name: Report Neovim version status
   debug:
     msg: "Neovim installed: {{ nvim_installed_version | default('none', true) }} | stable: {{ nvim_latest_version | default('unknown', true) }} | action: {{ 'build from source' if nvim_needs_build else 'none' }}"
+
+- name: Note that Neovim is not installed
+  debug:
+    msg: "Neovim is not installed on this host. Run setup-dev-env.yml to provision it - this playbook does not install build dependencies."
+  when: not nvim_installed.stat.exists and not nvim_needs_build
 
 - name: Note available Neovim update
   debug:
@@ -132,11 +140,16 @@
 
 - name: Decide whether Zellij needs installing or updating
   set_fact:
-    zellij_needs_update: "{{ (not zellij_installed.stat.exists) or (force_update_zellij | default(false) | bool) or (zellij_latest_version != '' and zellij_installed_version != zellij_latest_version) }}"
+    zellij_needs_update: "{{ ((not zellij_installed.stat.exists) and (install_missing | default(true) | bool)) or (force_update_zellij | default(false) | bool) or (zellij_installed.stat.exists and zellij_latest_version != '' and zellij_installed_version != zellij_latest_version) }}"
 
 - name: Report Zellij version status
   debug:
     msg: "Zellij installed: {{ zellij_installed_version | default('none', true) }} | latest: {{ zellij_latest_version | default('unknown', true) }} | action: {{ 'install/update' if zellij_needs_update else 'none' }}"
+
+- name: Note that Zellij is not installed
+  debug:
+    msg: "Zellij is not installed on this host. Run setup-dev-env.yml to provision it."
+  when: not zellij_installed.stat.exists and not zellij_needs_update
 
 - name: Download Zellij binary
   get_url:
