@@ -32,71 +32,6 @@
         msg: "Could not change shell - user may be LDAP/AD managed. Set shell manually or contact your admin."
       when: shell_change_result is failed
 
-    # ===== Configure Automatic Updates =====
-    - name: Install unattended-upgrades (Debian/Ubuntu)
-      package:
-        name: unattended-upgrades
-        state: present
-      when: ansible_os_family == 'Debian'
-
-    - name: Enable automatic updates (Debian/Ubuntu)
-      copy:
-        dest: /etc/apt/apt.conf.d/20auto-upgrades
-        content: |
-          APT::Periodic::Update-Package-Lists "1";
-          APT::Periodic::Unattended-Upgrade "1";
-          APT::Periodic::AutocleanInterval "7";
-        mode: '0644'
-      when: ansible_os_family == 'Debian'
-
-    - name: Configure unattended-upgrades (Debian/Ubuntu)
-      copy:
-        dest: /etc/apt/apt.conf.d/50unattended-upgrades
-        content: |
-          Unattended-Upgrade::Allowed-Origins {
-              "${distro_id}:${distro_codename}-security";
-              "${distro_id}ESMApps:${distro_codename}-apps-security";
-              "${distro_id}ESM:${distro_codename}-infra-security";
-          };
-          Unattended-Upgrade::AutoFixInterruptedDpkg "true";
-          Unattended-Upgrade::MinimalSteps "true";
-          Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
-          Unattended-Upgrade::Remove-Unused-Dependencies "true";
-          Unattended-Upgrade::Automatic-Reboot "false";
-        mode: '0644'
-      when: ansible_os_family == 'Debian'
-
-    - name: Install dnf-automatic (RedHat/Fedora)
-      package:
-        name: dnf-automatic
-        state: present
-      when: ansible_os_family == 'RedHat' and not (use_shell_pkg | default(false) | bool)
-
-    - name: Install dnf-automatic (RedHat/Fedora - shell fallback)
-      shell: dnf install -y dnf-automatic
-      when: ansible_os_family == 'RedHat' and (use_shell_pkg | default(false) | bool)
-
-    - name: Configure dnf-automatic (RedHat/Fedora)
-      ini_file:
-        path: /etc/dnf/automatic.conf
-        section: "{{ item.section }}"
-        option: "{{ item.option }}"
-        value: "{{ item.value }}"
-        mode: '0644'
-      loop:
-        - { section: 'commands', option: 'upgrade_type', value: 'security' }
-        - { section: 'commands', option: 'download_updates', value: 'yes' }
-        - { section: 'commands', option: 'apply_updates', value: 'yes' }
-        - { section: 'emitters', option: 'emit_via', value: 'stdio' }
-      when: ansible_os_family == 'RedHat'
-
-    - name: Enable and start dnf-automatic timer (RedHat/Fedora)
-      systemd:
-        name: dnf-automatic.timer
-        enabled: yes
-        state: started
-      when: ansible_os_family == 'RedHat'
-
     # ===== Deploy Git Configuration =====
     - name: Copy .gitconfig to user home directory
       copy:
@@ -119,8 +54,14 @@
       when: not ohmyzsh_stat.stat.exists
 
     # ===== Install Neovim =====
+    - name: Remove broken Firezone apt repository if present
+      file:
+        path: /etc/apt/sources.list.d/firezone-firezone.list
+        state: absent
+      when: ansible_os_family == 'Debian'
+
     - name: Install Neovim dependencies (Debian/Ubuntu)
-      package:
+      apt:
         name:
           - git
           - curl
@@ -128,6 +69,7 @@
           - ripgrep
           - fd-find
         state: present
+        update_cache: yes
       when: ansible_os_family == 'Debian'
 
     - name: Install Neovim dependencies (RedHat/Fedora)
@@ -163,6 +105,18 @@
           - curl
         state: present
       when: ansible_os_family == 'Debian'
+
+    - name: Enable EPEL repository (RedHat/Fedora)
+      package:
+        name: epel-release
+        state: present
+      when: ansible_os_family == 'RedHat' and not (use_shell_pkg | default(false) | bool)
+      ignore_errors: yes
+
+    - name: Enable EPEL repository (RedHat/Fedora - shell fallback)
+      shell: dnf install -y epel-release
+      when: ansible_os_family == 'RedHat' and (use_shell_pkg | default(false) | bool)
+      ignore_errors: yes
 
     - name: Install Neovim build dependencies (RedHat/Fedora)
       package:
