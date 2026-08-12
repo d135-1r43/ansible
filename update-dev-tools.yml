@@ -1,0 +1,14 @@
+---
+# Keeps Neovim and Zellij current on already-provisioned hosts.
+# Assumes setup-dev-env.yml has run at least once (build dependencies must be present).
+#
+#   ansible-playbook -i hosts.ini update-dev-tools.yml                        # update Zellij, report Neovim drift
+#   ansible-playbook -i hosts.ini update-dev-tools.yml -e update_neovim=true  # also rebuild Neovim when outdated
+#   ansible-playbook -i hosts.ini update-dev-tools.yml --check                # drift report only
+- name: Update Neovim and Zellij to the latest upstream releases
+  hosts: servers
+  become: yes
+
+  tasks:
+    - name: Install and update development tools
+      import_tasks: tasks/update-tools.yml

@@ -133,40 +133,9 @@
       shell: dnf install -y ninja-build gettext cmake unzip curl
       when: ansible_os_family == 'RedHat' and (use_shell_pkg | default(false) | bool)
 
-    - name: Check if Neovim is already installed
-      stat:
-        path: /usr/local/bin/nvim
-      register: nvim_installed
-
-    - name: Remove old Neovim installation artifacts
-      file:
-        path: "{{ item }}"
-        state: absent
-      loop:
-        - /opt/nvim-linux-x86_64
-        - /tmp/nvim-linux-x86_64.tar.gz
-      when: not nvim_installed.stat.exists
-
-    - name: Clone Neovim repository
-      git:
-        repo: https://github.com/neovim/neovim.git
-        dest: /tmp/neovim
-        version: stable
-        depth: 1
-      when: not nvim_installed.stat.exists
-
-    - name: Build and install Neovim from source
-      shell: |
-        cd /tmp/neovim
-        make CMAKE_BUILD_TYPE=RelWithDebInfo
-        make install
-      when: not nvim_installed.stat.exists
-
-    - name: Clean up Neovim source
-      file:
-        path: /tmp/neovim
-        state: absent
-      when: not nvim_installed.stat.exists
+    # ===== Install / Update Neovim and Zellij =====
+    - name: Install and update development tools
+      import_tasks: tasks/update-tools.yml
 
     # ===== Install LazyVim =====
     - name: Check if LazyVim config exists
@@ -223,60 +192,15 @@
       when: not lazyvim_config_stat.stat.exists
       become: no
 
-    # ===== Install Zellij =====
-    - name: Set Zellij architecture
-      set_fact:
-        zellij_arch: "{{ 'aarch64' if ansible_architecture == 'aarch64' else 'x86_64' }}"
-
-    - name: Check if Zellij is already installed
-      stat:
-        path: /usr/local/bin/zellij
-      register: zellij_installed
-
-    - name: Get installed Zellij version
-      command: /usr/local/bin/zellij --version
-      register: zellij_current_version
-      changed_when: false
-      failed_when: false
-      when: zellij_installed.stat.exists
-
-    - name: Display current Zellij version
-      debug:
-        msg: "Zellij already installed: {{ zellij_current_version.stdout }}"
-      when: zellij_installed.stat.exists and not (force_update_zellij | default(false) | bool)
-
-    - name: Download Zellij binary
-      get_url:
-        url: "https://github.com/zellij-org/zellij/releases/latest/download/zellij-{{ zellij_arch }}-unknown-linux-musl.tar.gz"
-        dest: /tmp/zellij.tar.gz
-        mode: '0644'
-        force: yes
-      when: not zellij_installed.stat.exists or (force_update_zellij | default(false) | bool)
-
-    - name: Extract Zellij binary
-      unarchive:
-        src: /tmp/zellij.tar.gz
-        dest: /usr/local/bin
-        remote_src: yes
-        mode: '0755'
-      when: not zellij_installed.stat.exists or (force_update_zellij | default(false) | bool)
-
-    - name: Clean up Zellij download
-      file:
-        path: /tmp/zellij.tar.gz
-        state: absent
-      when: not zellij_installed.stat.exists or (force_update_zellij | default(false) | bool)
-
     # ===== Post-installation messages =====
     - name: Display completion message
       debug:
         msg:
           - "===== Installation Complete ====="
-          - "Automatic security updates configured and enabled"
           - "Zsh installed and set as default shell"
           - "Oh My Zsh installed at {{ user_home }}/.oh-my-zsh"
-          - "Neovim and LazyVim ready (existing installations preserved)"
-          - "Zellij installed"
+          - "Neovim {{ (nvim_latest_version if nvim_needs_build else nvim_installed_version) | default('', true) }} and LazyVim ready"
+          - "Zellij {{ (zellij_latest_version if zellij_needs_update else zellij_installed_version) | default('', true) }} installed"
           - ""
           - "Next steps:"
           - "1. Log out and log back in for shell changes to take effect"
@@ -284,3 +208,4 @@
           - "3. Run 'zellij' to start using Zellij terminal multiplexer"
           - ""
           - "Note: Existing Neovim configs are preserved and not overwritten"
+          - "Keep tools current with: ansible-playbook -i hosts.ini update-dev-tools.yml"

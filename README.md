@@ -82,6 +82,54 @@ The playbook is configured to run against remote servers defined in `hosts.ini`.
 
 - **Build Time**: First run will take longer (5-10 minutes per server) as Neovim is built from source. Subsequent runs will be faster.
 
+## Keeping Neovim and Zellij Up To Date
+
+`update-dev-tools.yml` compares the installed versions against the latest upstream
+releases and updates them. Run it on already-provisioned hosts:
+
+```bash
+# Update Zellij where outdated, report Neovim drift
+ansible-playbook -i hosts.ini update-dev-tools.yml
+
+# Also rebuild Neovim from source where a newer stable exists
+ansible-playbook -i hosts.ini update-dev-tools.yml -e update_neovim=true
+
+# Drift report only, changes nothing
+ansible-playbook -i hosts.ini update-dev-tools.yml --check
+```
+
+Both tools report their status on every run, for example:
+
+```
+Neovim installed: 0.11.5 | stable: 0.12.4 | action: none
+Zellij installed: 0.43.1 | latest: 0.44.3 | action: install/update
+```
+
+**Zellij** updates automatically whenever a newer release exists — it is a binary
+swap that takes seconds. **Neovim** only reports drift by default, because it is
+built from source and a rebuild costs 5-10 minutes per host; pass
+`-e update_neovim=true` when you want the rebuild to happen.
+
+The same checks run as part of `setup-dev-env.yml`, so provisioning and updating
+share one code path (`tasks/update-tools.yml`).
+
+**Available flags:**
+- `update_neovim` - rebuild Neovim when a newer stable release exists
+- `force_update_neovim` - rebuild Neovim unconditionally
+- `force_update_zellij` - reinstall Zellij even if already current
+
+### Scheduling updates
+
+Run it from cron on your control machine to stay current automatically:
+
+```cron
+# Weekly update of Zellij, plus a Neovim drift report by mail
+0 6 * * 1 cd /path/to/ansible && ansible-playbook -i hosts.ini update-dev-tools.yml
+```
+
+Neovim rebuilds are intentionally left out of the scheduled run so it stays fast;
+run the `-e update_neovim=true` variant by hand when the report shows drift.
+
 ## What Gets Installed
 
 ### Zsh + Oh My Zsh

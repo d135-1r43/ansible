@@ -1,0 +1,161 @@
+---
+# Version-aware install/update for Neovim and Zellij.
+# Imported by setup-dev-env.yml (provisioning) and update-dev-tools.yml (updates only).
+#
+# Variables:
+#   force_update_zellij  - reinstall Zellij even if it is already at the latest version
+#   update_neovim        - rebuild Neovim from source when a newer stable release exists
+#   force_update_neovim  - rebuild Neovim from source unconditionally
+#
+# Zellij updates itself on every run when a newer release exists (binary swap, seconds).
+# Neovim only reports drift by default, because building from source takes 5-10 minutes
+# per host. Build dependencies are installed by setup-dev-env.yml, not here.
+
+# ===== Neovim =====
+- name: Check if Neovim is already installed
+  stat:
+    path: /usr/local/bin/nvim
+  register: nvim_installed
+
+- name: Get installed Neovim version
+  command: /usr/local/bin/nvim --version
+  register: nvim_version_cmd
+  changed_when: false
+  failed_when: false
+  check_mode: no
+  when: nvim_installed.stat.exists
+
+- name: Query latest Neovim stable release
+  uri:
+    url: https://api.github.com/repos/neovim/neovim/releases/latest
+    return_content: yes
+    timeout: 15
+  register: nvim_release
+  delegate_to: localhost
+  become: no
+  run_once: yes
+  check_mode: no
+  failed_when: false
+
+- name: Set Neovim version facts
+  set_fact:
+    nvim_installed_version: "{{ (nvim_version_cmd.stdout | default('') | regex_search('[0-9]+\\.[0-9]+\\.[0-9]+')) | default('', true) }}"
+    nvim_latest_version: "{{ (nvim_release.json.tag_name | default('') | regex_replace('^v', '')) | default('', true) }}"
+
+- name: Detect Neovim version drift
+  set_fact:
+    nvim_outdated: "{{ nvim_installed.stat.exists and nvim_latest_version != '' and nvim_installed_version != nvim_latest_version }}"
+
+- name: Decide whether Neovim needs building
+  set_fact:
+    nvim_needs_build: "{{ (not nvim_installed.stat.exists) or (force_update_neovim | default(false) | bool) or (nvim_outdated and (update_neovim | default(false) | bool)) }}"
+
+- name: Report Neovim version status
+  debug:
+    msg: "Neovim installed: {{ nvim_installed_version | default('none', true) }} | stable: {{ nvim_latest_version | default('unknown', true) }} | action: {{ 'build from source' if nvim_needs_build else 'none' }}"
+
+- name: Note available Neovim update
+  debug:
+    msg: "Neovim {{ nvim_latest_version }} is available. Re-run with '-e update_neovim=true' to rebuild from source (5-10 minutes per host)."
+  when: nvim_outdated and not nvim_needs_build
+
+- name: Remove old Neovim installation artifacts
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /opt/nvim-linux-x86_64
+    - /tmp/nvim-linux-x86_64.tar.gz
+  when: nvim_needs_build and not ansible_check_mode
+
+- name: Clone Neovim repository
+  git:
+    repo: https://github.com/neovim/neovim.git
+    dest: /tmp/neovim
+    version: stable
+    depth: 1
+    force: yes
+  when: nvim_needs_build and not ansible_check_mode
+
+- name: Build and install Neovim from source
+  shell: |
+    cd /tmp/neovim
+    make CMAKE_BUILD_TYPE=RelWithDebInfo
+    make install
+  when: nvim_needs_build and not ansible_check_mode
+
+- name: Clean up Neovim source
+  file:
+    path: /tmp/neovim
+    state: absent
+  when: nvim_needs_build and not ansible_check_mode
+
+# ===== Zellij =====
+- name: Set Zellij architecture
+  set_fact:
+    zellij_arch: "{{ 'aarch64' if ansible_architecture == 'aarch64' else 'x86_64' }}"
+
+- name: Check if Zellij is already installed
+  stat:
+    path: /usr/local/bin/zellij
+  register: zellij_installed
+
+- name: Get installed Zellij version
+  command: /usr/local/bin/zellij --version
+  register: zellij_version_cmd
+  changed_when: false
+  failed_when: false
+  check_mode: no
+  when: zellij_installed.stat.exists
+
+- name: Query latest Zellij release
+  uri:
+    url: https://api.github.com/repos/zellij-org/zellij/releases/latest
+    return_content: yes
+    timeout: 15
+  register: zellij_release
+  delegate_to: localhost
+  become: no
+  run_once: yes
+  check_mode: no
+  failed_when: false
+
+- name: Set Zellij version facts
+  set_fact:
+    zellij_installed_version: "{{ (zellij_version_cmd.stdout | default('') | regex_search('[0-9]+\\.[0-9]+\\.[0-9]+')) | default('', true) }}"
+    zellij_latest_version: "{{ (zellij_release.json.tag_name | default('') | regex_replace('^v', '')) | default('', true) }}"
+
+- name: Warn if the latest Zellij version could not be determined
+  debug:
+    msg: "Could not reach the GitHub API - skipping the Zellij update check."
+  when: zellij_latest_version == ''
+
+- name: Decide whether Zellij needs installing or updating
+  set_fact:
+    zellij_needs_update: "{{ (not zellij_installed.stat.exists) or (force_update_zellij | default(false) | bool) or (zellij_latest_version != '' and zellij_installed_version != zellij_latest_version) }}"
+
+- name: Report Zellij version status
+  debug:
+    msg: "Zellij installed: {{ zellij_installed_version | default('none', true) }} | latest: {{ zellij_latest_version | default('unknown', true) }} | action: {{ 'install/update' if zellij_needs_update else 'none' }}"
+
+- name: Download Zellij binary
+  get_url:
+    url: "https://github.com/zellij-org/zellij/releases/latest/download/zellij-{{ zellij_arch }}-unknown-linux-musl.tar.gz"
+    dest: /tmp/zellij.tar.gz
+    mode: '0644'
+    force: yes
+  when: zellij_needs_update and not ansible_check_mode
+
+- name: Extract Zellij binary
+  unarchive:
+    src: /tmp/zellij.tar.gz
+    dest: /usr/local/bin
+    remote_src: yes
+    mode: '0755'
+  when: zellij_needs_update and not ansible_check_mode
+
+- name: Clean up Zellij download
+  file:
+    path: /tmp/zellij.tar.gz
+    state: absent
+  when: zellij_needs_update and not ansible_check_mode
