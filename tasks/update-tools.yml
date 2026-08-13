@@ -13,20 +13,43 @@
 # Zellij updates itself on every run when a newer release exists (binary swap, seconds).
 # Neovim only reports drift by default, because building from source takes 5-10 minutes
 # per host. Build dependencies are installed by setup-dev-env.yml, not here.
+#
+# Tools are located on PATH rather than assumed at /usr/local/bin, so a distribution
+# package (for example /usr/bin/nvim) is seen and updated instead of silently ignored.
+# A copy we built into /usr/local/bin wins when both are present, since that is the
+# one this playbook manages and the one that normally comes first on PATH.
 
 # ===== Neovim =====
-- name: Check if Neovim is already installed
-  stat:
-    path: /usr/local/bin/nvim
-  register: nvim_installed
+- name: Locate the Neovim binary
+  shell: |
+    if [ -x /usr/local/bin/nvim ]; then
+      echo /usr/local/bin/nvim
+    else
+      command -v nvim || true
+    fi
+  register: nvim_which
+  changed_when: false
+  failed_when: false
+  check_mode: no
+
+- name: Set Neovim path facts
+  set_fact:
+    nvim_path: "{{ nvim_which.stdout | default('', true) | trim }}"
 
 - name: Get installed Neovim version
-  command: /usr/local/bin/nvim --version
+  command: "{{ nvim_path }} --version"
   register: nvim_version_cmd
   changed_when: false
   failed_when: false
   check_mode: no
-  when: nvim_installed.stat.exists
+  when: nvim_path != ''
+
+- name: Check for Neovim build dependencies
+  shell: command -v cmake >/dev/null 2>&1 && command -v make >/dev/null 2>&1 && command -v gcc >/dev/null 2>&1
+  register: nvim_build_deps
+  changed_when: false
+  failed_when: false
+  check_mode: no
 
 - name: Query latest Neovim stable release
   uri:
@@ -47,25 +70,34 @@
 
 - name: Detect Neovim version drift
   set_fact:
-    nvim_outdated: "{{ nvim_installed.stat.exists and nvim_latest_version != '' and nvim_installed_version != nvim_latest_version }}"
+    nvim_outdated: "{{ nvim_path != '' and nvim_latest_version != '' and nvim_installed_version != nvim_latest_version }}"
 
-- name: Decide whether Neovim needs building
+- name: Decide whether Neovim should be built
   set_fact:
-    nvim_needs_build: "{{ ((not nvim_installed.stat.exists) and (install_missing | default(true) | bool)) or (force_update_neovim | default(false) | bool) or (nvim_outdated and (update_neovim | default(false) | bool)) }}"
+    nvim_build_wanted: "{{ ((nvim_path == '') and (install_missing | default(true) | bool)) or (force_update_neovim | default(false) | bool) or (nvim_outdated and (update_neovim | default(false) | bool)) }}"
+
+- name: Decide whether Neovim can be built
+  set_fact:
+    nvim_needs_build: "{{ nvim_build_wanted and nvim_build_deps.rc == 0 }}"
 
 - name: Report Neovim version status
   debug:
-    msg: "Neovim installed: {{ nvim_installed_version | default('none', true) }} | stable: {{ nvim_latest_version | default('unknown', true) }} | action: {{ 'build from source' if nvim_needs_build else 'none' }}"
+    msg: "Neovim installed: {{ nvim_installed_version | default('none', true) }}{{ ' at ' + nvim_path if nvim_path != '' else '' }} | stable: {{ nvim_latest_version | default('unknown', true) }} | action: {{ 'build from source' if nvim_needs_build else 'none' }}"
+
+- name: Note that Neovim build dependencies are missing
+  debug:
+    msg: "Neovim needs building here but cmake/make/gcc are missing. Run setup-dev-env.yml on this host to install the build dependencies first."
+  when: nvim_build_wanted and nvim_build_deps.rc != 0
 
 - name: Note that Neovim is not installed
   debug:
     msg: "Neovim is not installed on this host. Run setup-dev-env.yml to provision it - this playbook does not install build dependencies."
-  when: not nvim_installed.stat.exists and not nvim_needs_build
+  when: nvim_path == '' and not nvim_build_wanted
 
 - name: Note available Neovim update
   debug:
     msg: "Neovim {{ nvim_latest_version }} is available. Re-run with '-e update_neovim=true' to rebuild from source (5-10 minutes per host)."
-  when: nvim_outdated and not nvim_needs_build
+  when: nvim_outdated and not nvim_build_wanted
 
 - name: Remove old Neovim installation artifacts
   file:
@@ -98,23 +130,48 @@
     state: absent
   when: nvim_needs_build and not ansible_check_mode
 
+- name: Warn if an older Neovim still shadows the new build
+  shell: command -v nvim || true
+  register: nvim_after_build
+  changed_when: false
+  failed_when: false
+  when: nvim_needs_build and not ansible_check_mode
+
+- name: Report a shadowed Neovim build
+  debug:
+    msg: "Neovim was installed to /usr/local/bin but '{{ nvim_after_build.stdout | trim }}' comes first on PATH. Remove the distribution package to pick up the new build."
+  when:
+    - nvim_needs_build and not ansible_check_mode
+    - (nvim_after_build.stdout | default('', true) | trim) not in ['', '/usr/local/bin/nvim']
+
 # ===== Zellij =====
 - name: Set Zellij architecture
   set_fact:
     zellij_arch: "{{ 'aarch64' if ansible_architecture == 'aarch64' else 'x86_64' }}"
 
-- name: Check if Zellij is already installed
-  stat:
-    path: /usr/local/bin/zellij
-  register: zellij_installed
+- name: Locate the Zellij binary
+  shell: |
+    if [ -x /usr/local/bin/zellij ]; then
+      echo /usr/local/bin/zellij
+    else
+      command -v zellij || true
+    fi
+  register: zellij_which
+  changed_when: false
+  failed_when: false
+  check_mode: no
+
+- name: Set Zellij path facts
+  set_fact:
+    zellij_path: "{{ zellij_which.stdout | default('', true) | trim }}"
 
 - name: Get installed Zellij version
-  command: /usr/local/bin/zellij --version
+  command: "{{ zellij_path }} --version"
   register: zellij_version_cmd
   changed_when: false
   failed_when: false
   check_mode: no
-  when: zellij_installed.stat.exists
+  when: zellij_path != ''
 
 - name: Query latest Zellij release
   uri:
@@ -140,16 +197,16 @@
 
 - name: Decide whether Zellij needs installing or updating
   set_fact:
-    zellij_needs_update: "{{ ((not zellij_installed.stat.exists) and (install_missing | default(true) | bool)) or (force_update_zellij | default(false) | bool) or (zellij_installed.stat.exists and zellij_latest_version != '' and zellij_installed_version != zellij_latest_version) }}"
+    zellij_needs_update: "{{ ((zellij_path == '') and (install_missing | default(true) | bool)) or (force_update_zellij | default(false) | bool) or (zellij_path != '' and zellij_latest_version != '' and zellij_installed_version != zellij_latest_version) }}"
 
 - name: Report Zellij version status
   debug:
-    msg: "Zellij installed: {{ zellij_installed_version | default('none', true) }} | latest: {{ zellij_latest_version | default('unknown', true) }} | action: {{ 'install/update' if zellij_needs_update else 'none' }}"
+    msg: "Zellij installed: {{ zellij_installed_version | default('none', true) }}{{ ' at ' + zellij_path if zellij_path != '' else '' }} | latest: {{ zellij_latest_version | default('unknown', true) }} | action: {{ 'install/update' if zellij_needs_update else 'none' }}"
 
 - name: Note that Zellij is not installed
   debug:
     msg: "Zellij is not installed on this host. Run setup-dev-env.yml to provision it."
-  when: not zellij_installed.stat.exists and not zellij_needs_update
+  when: zellij_path == '' and not zellij_needs_update
 
 - name: Download Zellij binary
   get_url:
