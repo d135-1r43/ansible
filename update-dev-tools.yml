@@ -12,7 +12,12 @@
   vars:
     # Update only what is already there; never attempt a fresh install here.
     install_missing: false
+    user_name: "{{ ansible_user }}"
+    user_home: "{{ '/root' if ansible_user == 'root' else '/home/' + ansible_user }}"
 
   tasks:
     - name: Install and update development tools
       import_tasks: tasks/update-tools.yml
+
+    - name: Deploy Zellij configuration
+      import_tasks: tasks/zellij-config.yml

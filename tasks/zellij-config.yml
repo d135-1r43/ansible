@@ -1,0 +1,29 @@
+---
+# Deploys the Zellij keybinding overrides to the connecting user's home.
+# Imported by setup-dev-env.yml (provisioning) and update-dev-tools.yml, so
+# already-provisioned hosts pick the config up on the next update run.
+#
+# See files/zellij-config.kdl for why the bindings look the way they do.
+# The file is a partial config: it merges with zellij's defaults rather than
+# replacing them, so it does not need updating when zellij changes its keymap.
+
+- name: Ensure the Zellij config directory exists
+  file:
+    path: "{{ user_home }}/.config/zellij"
+    state: directory
+    mode: '0755'
+  become: no
+
+- name: Deploy Zellij configuration
+  copy:
+    src: "{{ playbook_dir }}/files/zellij-config.kdl"
+    dest: "{{ user_home }}/.config/zellij/config.kdl"
+    mode: '0644'
+    backup: yes
+  become: no
+  register: zellij_config_copy
+
+- name: Note that running Zellij sessions need a restart
+  debug:
+    msg: "Zellij config updated. Running sessions keep the old keybindings - exit and start a new session to pick them up."
+  when: zellij_config_copy is changed

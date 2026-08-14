@@ -137,6 +137,10 @@
     - name: Install and update development tools
       import_tasks: tasks/update-tools.yml
 
+    # ===== Configure Zellij =====
+    - name: Deploy Zellij configuration
+      import_tasks: tasks/zellij-config.yml
+
     # ===== Install LazyVim =====
     - name: Check if LazyVim config exists
       stat:

@@ -38,8 +38,10 @@ ansible minion20 -i hosts.ini -m shell -a "command" -b
 - **setup-dev-env.yml**: Provisioning playbook, organized by sections (Zsh, Oh My Zsh, dependencies, Neovim/Zellij, LazyVim)
 - **update-dev-tools.yml**: Update-only playbook for already-provisioned hosts
 - **tasks/update-tools.yml**: Version-aware install/update logic for Neovim and Zellij, imported by both playbooks
+- **tasks/zellij-config.yml**: Deploys the Zellij keybinding overrides, imported by both playbooks
 - **hosts.ini**: Inventory file with server groups (minions, other, thi, herhoffer) and a parent group `servers` that includes all
 - **.gitconfig**: Git configuration deployed to target servers
+- **files/zellij-config.kdl**: Partial Zellij config deployed to `~/.config/zellij/config.kdl`
 
 ## Key Details
 
@@ -50,5 +52,9 @@ ansible minion20 -i hosts.ini -m shell -a "command" -b
   once per run via `delegate_to: localhost` + `run_once` to avoid rate limits
 - Zellij auto-updates on version drift; Neovim only reports drift unless `update_neovim=true`
 - Existing Neovim configs are backed up with timestamps before LazyVim installation
+- The Zellij config is a *partial* config that merges with the built-in keymap, so it
+  survives upstream keybinding changes; it binds `Alt b`/`Alt f` (what macOS xterm.js
+  terminals actually send for Option+Left/Right) to tab switching, and moves
+  `ToggleFloatingPanes` from `Alt f` to `Alt w`
 - First run takes 5-10 minutes per server due to Neovim compilation
 - Mutating tasks are gated on `not ansible_check_mode` so `--check` runs work as drift reports

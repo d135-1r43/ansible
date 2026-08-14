@@ -148,6 +148,31 @@ run the `-e update_neovim=true` variant by hand when the report shows drift.
 ### Zellij
 - Installs Zellij terminal multiplexer
 - Ready to use with `zellij` command
+- Deploys keybinding overrides to `~/.config/zellij/config.kdl`
+
+#### Why Zellij gets a config
+
+Terminals built on xterm.js (Tabby, VS Code, Hyper) apply a hardcoded macOS-only
+rewrite before anything reaches the pty: `Alt+Left` becomes `ESC b` and
+`Alt+Right` becomes `ESC f`. No terminal setting disables it, so Zellij on the
+far end of an SSH session never sees `Alt left`/`Alt right` from a Mac client.
+Out of the box that makes Option+Right toggle floating panes and Option+Left do
+nothing at all.
+
+`files/zellij-config.kdl` binds the sequences that actually arrive:
+
+| Key | Sequence received | Action |
+| --- | --- | --- |
+| Option+Left | `Alt b` | `GoToPreviousTab` |
+| Option+Right | `Alt f` | `GoToNextTab` |
+| Option+W | `Alt w` | `ToggleFloatingPanes` (displaced from `Alt f`) |
+
+Option+Up/Down are not rewritten and keep their defaults. The file is a *partial*
+config — it merges with Zellij's built-in keymap instead of replacing it, so it
+does not need updating when Zellij changes its defaults.
+
+Running Zellij sessions keep the old keybindings; exit and start a new session to
+pick the config up.
 
 ## Post-Installation Steps
 
@@ -176,6 +201,9 @@ If you have existing Neovim configurations, they will be automatically backed up
 - `~/.local/share/nvim.backup.[timestamp]`
 - `~/.local/state/nvim.backup.[timestamp]`
 - `~/.cache/nvim.backup.[timestamp]`
+
+An existing `~/.config/zellij/config.kdl` is replaced, with the previous version
+kept next to it as `config.kdl.[timestamp]~`.
 
 ## Customization
 

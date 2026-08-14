@@ -1,0 +1,26 @@
+// Deployed by ansible (tasks/zellij-config.yml). Local edits are overwritten;
+// the previous file is kept alongside as config.kdl.<timestamp>~
+//
+// Terminals built on xterm.js (Tabby, VS Code, Hyper, ...) apply a hardcoded
+// macOS-only rewrite before anything reaches the pty:
+//
+//     Alt+Left  -> ESC b        Alt+Right -> ESC f
+//
+// It cannot be disabled by any terminal setting, so zellij on the far end of an
+// SSH session never receives "Alt left"/"Alt right" from a Mac client - only
+// "Alt b"/"Alt f". Out of the box that makes Option+Right toggle floating panes
+// and Option+Left do nothing. Binding the sequences that actually arrive is the
+// fix. Alt+Up/Down are not rewritten and keep working normally.
+//
+// This block merges with zellij's built-in keybindings: anything not named here
+// keeps its default (no clear-defaults, so the rest of the map is untouched).
+keybinds {
+    shared_except "locked" {
+        bind "Alt b" { GoToPreviousTab; }
+        bind "Alt f" { GoToNextTab; }
+
+        // Alt f is zellij's default floating-pane toggle, displaced above.
+        // Ctrl p then w still works too.
+        bind "Alt w" { ToggleFloatingPanes; }
+    }
+}
