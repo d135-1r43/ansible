@@ -1,26 +1,39 @@
 ---
-# Deploys the Zellij keybinding overrides to the connecting user's home.
-# Imported by setup-dev-env.yml (provisioning) and update-dev-tools.yml, so
-# already-provisioned hosts pick the config up on the next update run.
+# Deploys the Zellij keybinding overrides to every home in config_targets (see
+# tasks/user-identity.yml). Imported by setup-dev-env.yml (provisioning) and
+# update-dev-tools.yml, so already-provisioned hosts pick the config up on the next
+# update run.
 #
 # See files/zellij-config.kdl for why the bindings look the way they do.
 # The file is a partial config: it merges with zellij's defaults rather than
 # replacing them, so it does not need updating when zellij changes its keymap.
+#
+# These run as root (the play's become) rather than become: no, because on a host we
+# log into unprivileged there is a second, root-owned target. Ownership is therefore
+# set explicitly instead of being inherited from the connecting user.
 
 - name: Ensure the Zellij config directory exists
   file:
-    path: "{{ user_home }}/.config/zellij"
+    path: "{{ item.home }}/.config/zellij"
     state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
     mode: '0755'
-  become: no
+  loop: "{{ config_targets }}"
+  loop_control:
+    label: "{{ item.home }}"
 
 - name: Deploy Zellij configuration
   copy:
     src: "{{ playbook_dir }}/files/zellij-config.kdl"
-    dest: "{{ user_home }}/.config/zellij/config.kdl"
+    dest: "{{ item.home }}/.config/zellij/config.kdl"
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
     mode: '0644'
     backup: yes
-  become: no
+  loop: "{{ config_targets }}"
+  loop_control:
+    label: "{{ item.home }}"
   register: zellij_config_copy
 
 - name: Note that running Zellij sessions need a restart

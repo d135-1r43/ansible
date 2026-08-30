@@ -10,6 +10,12 @@
     # installed is harmless.
     dnf_disable_plugins:
       - needrestart
+    # Neovim directories moved aside before LazyVim is installed.
+    nvim_state_dirs:
+      - .config/nvim
+      - .local/share/nvim
+      - .local/state/nvim
+      - .cache/nvim
 
   tasks:
     # ===== Identify the connecting user =====
@@ -53,13 +59,16 @@
       when: shell_change_result is failed
 
     # ===== Deploy Git Configuration =====
-    - name: Copy .gitconfig to user home directory
+    - name: Copy .gitconfig to the managed home directories
       copy:
         src: .gitconfig
-        dest: "{{ user_home }}/.gitconfig"
-        owner: "{{ user_name }}"
+        dest: "{{ item.home }}/.gitconfig"
+        owner: "{{ item.owner }}"
+        group: "{{ item.group }}"
         mode: '0644'
-      become: no
+      loop: "{{ config_targets }}"
+      loop_control:
+        label: "{{ item.home }}"
 
     # ===== Install Oh My Zsh =====
     - name: Check if Oh My Zsh is installed
@@ -198,57 +207,59 @@
     # ===== Install LazyVim =====
     - name: Check if LazyVim config exists
       stat:
-        path: "{{ user_home }}/.config/nvim/lua/config/lazy.lua"
+        path: "{{ item.home }}/.config/nvim/lua/config/lazy.lua"
       register: lazyvim_config_stat
-      become: no
+      loop: "{{ config_targets }}"
+      loop_control:
+        label: "{{ item.home }}"
 
-    - name: Skip LazyVim installation if already configured
+    - name: Select the homes that still need LazyVim
+      set_fact:
+        lazyvim_missing: "{{ lazyvim_config_stat.results | rejectattr('stat.exists') | map(attribute='item') | list }}"
+
+    - name: Skip LazyVim installation where it is already configured
       debug:
-        msg: "LazyVim already installed, skipping configuration"
-      when: lazyvim_config_stat.stat.exists
+        msg: "LazyVim already installed in {{ (config_targets | map(attribute='home') | list) | difference(lazyvim_missing | map(attribute='home') | list) | join(', ') }}, skipping configuration"
+      when: lazyvim_missing | length < config_targets | length
 
-    - name: Backup existing Neovim config
-      command: mv {{ user_home }}/.config/nvim {{ user_home }}/.config/nvim.backup.{{ ansible_date_time.epoch }}
+    # Existing configs are moved aside rather than overwritten, so nothing is lost.
+    - name: Backup existing Neovim directories
+      command: >-
+        mv {{ item.0.home }}/{{ item.1 }}
+        {{ item.0.home }}/{{ item.1 }}.backup.{{ ansible_date_time.epoch }}
       args:
-        removes: "{{ user_home }}/.config/nvim"
-      when: not lazyvim_config_stat.stat.exists
-      become: no
-
-    - name: Backup existing Neovim data
-      command: mv {{ user_home }}/.local/share/nvim {{ user_home }}/.local/share/nvim.backup.{{ ansible_date_time.epoch }}
-      args:
-        removes: "{{ user_home }}/.local/share/nvim"
-      when: not lazyvim_config_stat.stat.exists
-      become: no
-
-    - name: Backup existing Neovim state
-      command: mv {{ user_home }}/.local/state/nvim {{ user_home }}/.local/state/nvim.backup.{{ ansible_date_time.epoch }}
-      args:
-        removes: "{{ user_home }}/.local/state/nvim"
-      when: not lazyvim_config_stat.stat.exists
-      become: no
-
-    - name: Backup existing Neovim cache
-      command: mv {{ user_home }}/.cache/nvim {{ user_home }}/.cache/nvim.backup.{{ ansible_date_time.epoch }}
-      args:
-        removes: "{{ user_home }}/.cache/nvim"
-      when: not lazyvim_config_stat.stat.exists
-      become: no
+        removes: "{{ item.0.home }}/{{ item.1 }}"
+      loop: "{{ lazyvim_missing | product(nvim_state_dirs) | list }}"
+      loop_control:
+        label: "{{ item.0.home }}/{{ item.1 }}"
 
     - name: Clone LazyVim starter configuration
       git:
         repo: https://github.com/LazyVim/starter
-        dest: "{{ user_home }}/.config/nvim"
+        dest: "{{ item.home }}/.config/nvim"
         depth: 1
-      when: not lazyvim_config_stat.stat.exists
-      become: no
+      loop: "{{ lazyvim_missing }}"
+      loop_control:
+        label: "{{ item.home }}"
 
     - name: Remove .git folder from LazyVim config
       file:
-        path: "{{ user_home }}/.config/nvim/.git"
+        path: "{{ item.home }}/.config/nvim/.git"
         state: absent
-      when: not lazyvim_config_stat.stat.exists
-      become: no
+      loop: "{{ lazyvim_missing }}"
+      loop_control:
+        label: "{{ item.home }}"
+
+    # The clone runs as root, so hand the tree back to the user who has to write to it.
+    - name: Give the LazyVim config to its owner
+      file:
+        path: "{{ item.home }}/.config/nvim"
+        owner: "{{ item.owner }}"
+        group: "{{ item.group }}"
+        recurse: yes
+      loop: "{{ lazyvim_missing }}"
+      loop_control:
+        label: "{{ item.home }}"
 
     # ===== Post-installation messages =====
     - name: Display completion message

@@ -42,7 +42,7 @@ ansible minion20 -i hosts.ini -m shell -a "command" -b
 - **update-dev-tools.yml**: Update-only playbook for already-provisioned hosts
 - **tasks/update-tools.yml**: Version-aware install/update logic for Neovim and Zellij, imported by both playbooks
 - **tasks/zellij-config.yml**: Deploys the Zellij keybinding overrides, imported by both playbooks
-- **tasks/user-identity.yml**: Resolves `user_name`/`user_home` from the target, imported by both playbooks
+- **tasks/user-identity.yml**: Resolves `user_name`/`user_home`/`config_targets` from the target, imported by both playbooks
 - **hosts.ini**: Inventory file defining the `servers` group
 - **.gitconfig**: Git configuration deployed to target servers
 - **files/zellij-config.kdl**: Partial Zellij config deployed to `~/.config/zellij/config.kdl`
@@ -54,6 +54,14 @@ ansible minion20 -i hosts.ini -m shell -a "command" -b
 - Most hosts log in as root, so become is a no-op there. `boe-vm` logs in as `markus`
   and escalates with sudo, which asks for a password: any run including that host
   needs `--ask-become-pass` / `-K`. Do not put the password in the inventory
+- Per-user files (.gitconfig, Zellij config, LazyVim) are deployed to every home in
+  `config_targets`, not just one. On a root-login host that is a single entry, so
+  behaviour is unchanged; on a sudo-escalating host it is the login user *and* root,
+  so a root shell gets the same keybindings and editor config. These tasks run as
+  root and set `owner`/`group` explicitly rather than using `become: no`, and the
+  LazyVim clone is chowned back to the target user afterwards
+- Oh My Zsh is deliberately *not* deployed to root - it is installed by piping the
+  upstream installer into a shell, which is more than the root account needs
 - `user_name`/`user_home` are discovered on the target (`id -un`, `$HOME`) by
   tasks/user-identity.yml, with `become: no` so they describe the login user rather
   than the become user. Do not reintroduce `ansible_user`: it is undefined unless the

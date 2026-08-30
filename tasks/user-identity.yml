@@ -1,15 +1,23 @@
 ---
-# Resolves the connecting user and their home directory into user_name / user_home.
-# Imported by setup-dev-env.yml and update-dev-tools.yml, both of which deploy files
-# into the user's home.
+# Resolves who we are on the target and which home directories receive the per-user
+# configuration. Imported by setup-dev-env.yml and update-dev-tools.yml.
 #
 # ansible_user is only defined when the inventory, ansible.cfg or -u sets it
 # explicitly, so it cannot be relied on - deriving user_home from it also hardcoded
 # /home/<user>, which is wrong for root and for any non-standard home. Ask the target
 # instead, with become: no so we see the login user rather than the become user.
+#
+# Sets:
+#   user_name / user_home / user_group - the login user
+#   config_targets - list of {home, owner, group} that get the dotfiles. Hosts we log
+#     into as root yield a single entry, so their behaviour is unchanged. Hosts we log
+#     into unprivileged and escalate on yield the login user *and* root, so a root
+#     shell there gets the same Zellij keybindings and Neovim config.
 
 - name: Determine the login user and home directory
-  shell: printf '%s\n%s\n' "$(id -un)" "$HOME"
+  shell: |
+    printf '%s\n%s\n%s\n%s\n' \
+      "$(id -un)" "$HOME" "$(id -gn)" "$(getent passwd root | cut -d: -f6)"
   register: remote_identity
   changed_when: false
   check_mode: no
@@ -19,3 +27,15 @@
   set_fact:
     user_name: "{{ remote_identity.stdout_lines[0] | trim }}"
     user_home: "{{ remote_identity.stdout_lines[1] | trim }}"
+    user_group: "{{ remote_identity.stdout_lines[2] | trim }}"
+    root_home: "{{ remote_identity.stdout_lines[3] | trim }}"
+
+- name: Set the home directories that receive the configuration
+  set_fact:
+    config_targets: "{{ [{'home': user_home, 'owner': user_name, 'group': user_group}]
+                        + ([{'home': root_home, 'owner': 'root', 'group': 'root'}]
+                           if user_name != 'root' else []) }}"
+
+- name: Report the configuration targets
+  debug:
+    msg: "Login user {{ user_name }} ({{ user_home }}); deploying configuration to {{ config_targets | map(attribute='home') | join(', ') }}"
