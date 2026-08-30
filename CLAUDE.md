@@ -9,8 +9,11 @@ This is an Ansible playbook for provisioning development environments on remote 
 ## Common Commands
 
 ```bash
-# Run playbook on all servers
-ansible-playbook -i hosts.ini setup-dev-env.yml
+# Run playbook on all servers (-K because boe-vm escalates with a sudo password)
+ansible-playbook -i hosts.ini setup-dev-env.yml -K
+
+# The root-login hosts need no -K
+ansible-playbook -i hosts.ini setup-dev-env.yml --limit 'agiles-ehrenamt.de,herhoffer.net'
 
 # Update Neovim/Zellij on already-provisioned servers
 ansible-playbook -i hosts.ini update-dev-tools.yml                        # Zellij updates, Neovim drift report
@@ -48,6 +51,9 @@ ansible minion20 -i hosts.ini -m shell -a "command" -b
 
 - Targets the `servers` host group by default (includes all child groups)
 - Uses `become: yes` for privilege escalation
+- Most hosts log in as root, so become is a no-op there. `boe-vm` logs in as `markus`
+  and escalates with sudo, which asks for a password: any run including that host
+  needs `--ask-become-pass` / `-K`. Do not put the password in the inventory
 - `user_name`/`user_home` are discovered on the target (`id -un`, `$HOME`) by
   tasks/user-identity.yml, with `become: no` so they describe the login user rather
   than the become user. Do not reintroduce `ansible_user`: it is undefined unless the

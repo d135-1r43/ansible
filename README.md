@@ -34,7 +34,13 @@ The playbook is configured to run against remote servers defined in `hosts.ini`.
    [servers]
    server1 ansible_host=server1.example.com ansible_user=root
    server2 ansible_host=192.168.1.10 ansible_user=root
+   # A host that logs in unprivileged and escalates with sudo
+   server3 ansible_host=192.168.1.11 ansible_user=markus
    ```
+
+   Hosts that log in as a non-root user escalate with sudo. If their sudo asks for a
+   password, run the playbook with `--ask-become-pass` (`-K`) and Ansible will prompt
+   for it. Do not store the password in the inventory.
 
 2. **Run the playbook against all servers**:
    ```bash
@@ -43,11 +49,15 @@ The playbook is configured to run against remote servers defined in `hosts.ini`.
 
    # Target specific server
    ansible-playbook -i hosts.ini setup-dev-env.yml --limit server1
+
+   # Prompt for the sudo password (needed for hosts that escalate with sudo)
+   ansible-playbook -i hosts.ini setup-dev-env.yml -K
    ```
 
    **Flags explained:**
    - `-i hosts.ini` - Specifies the inventory file
    - `--limit server1` - Run only on specific host(s)
+   - `-K` / `--ask-become-pass` - Prompt for the sudo password
 
 3. **For multiple server groups**, create a more detailed inventory:
    ```ini
