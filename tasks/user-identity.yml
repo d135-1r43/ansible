@@ -1,0 +1,21 @@
+---
+# Resolves the connecting user and their home directory into user_name / user_home.
+# Imported by setup-dev-env.yml and update-dev-tools.yml, both of which deploy files
+# into the user's home.
+#
+# ansible_user is only defined when the inventory, ansible.cfg or -u sets it
+# explicitly, so it cannot be relied on - deriving user_home from it also hardcoded
+# /home/<user>, which is wrong for root and for any non-standard home. Ask the target
+# instead, with become: no so we see the login user rather than the become user.
+
+- name: Determine the login user and home directory
+  shell: printf '%s\n%s\n' "$(id -un)" "$HOME"
+  register: remote_identity
+  changed_when: false
+  check_mode: no
+  become: no
+
+- name: Set user facts
+  set_fact:
+    user_name: "{{ remote_identity.stdout_lines[0] | trim }}"
+    user_home: "{{ remote_identity.stdout_lines[1] | trim }}"

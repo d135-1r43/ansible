@@ -3,16 +3,36 @@
   hosts: servers
   become: yes
   vars:
-    user_name: "{{ ansible_user }}"
-    user_home: "{{ '/root' if ansible_user == 'root' else '/home/' + ansible_user }}"
+    # The needrestart dnf plugin prints a human-readable summary after every successful
+    # transaction. That lands on stdout ahead of the JSON the dnf module parses, so the
+    # task fails even though the packages installed fine. Disable it for the transaction
+    # rather than changing the host's dnf configuration. Naming a plugin that is not
+    # installed is harmless.
+    dnf_disable_plugins:
+      - needrestart
 
   tasks:
+    # ===== Identify the connecting user =====
+    - name: Resolve the connecting user and home directory
+      import_tasks: tasks/user-identity.yml
+
     # ===== Install Zsh =====
     - name: Install Zsh
       package:
         name: zsh
         state: present
-      when: not (use_shell_pkg | default(false) | bool)
+      when:
+        - not (use_shell_pkg | default(false) | bool)
+        - ansible_os_family != 'RedHat'
+
+    - name: Install Zsh (RedHat/Fedora)
+      dnf:
+        name: zsh
+        state: present
+        disable_plugin: "{{ dnf_disable_plugins }}"
+      when:
+        - not (use_shell_pkg | default(false) | bool)
+        - ansible_os_family == 'RedHat'
 
     - name: Install Zsh (shell fallback)
       shell: dnf install -y zsh
@@ -73,7 +93,7 @@
       when: ansible_os_family == 'Debian'
 
     - name: Install Neovim dependencies (RedHat/Fedora)
-      package:
+      dnf:
         name:
           - git
           - curl
@@ -83,6 +103,7 @@
           - ripgrep
           - fd-find
         state: present
+        disable_plugin: "{{ dnf_disable_plugins }}"
       when: ansible_os_family == 'RedHat' and not (use_shell_pkg | default(false) | bool)
 
     - name: Install Neovim dependencies (RedHat/Fedora - shell fallback)
@@ -107,9 +128,10 @@
       when: ansible_os_family == 'Debian'
 
     - name: Enable EPEL repository (RedHat/Fedora)
-      package:
+      dnf:
         name: epel-release
         state: present
+        disable_plugin: "{{ dnf_disable_plugins }}"
       when: ansible_os_family == 'RedHat' and not (use_shell_pkg | default(false) | bool)
       ignore_errors: yes
 
@@ -118,8 +140,33 @@
       when: ansible_os_family == 'RedHat' and (use_shell_pkg | default(false) | bool)
       ignore_errors: yes
 
+    # ninja-build is not in BaseOS/AppStream or EPEL - it lives in the CRB repository
+    # (called PowerTools on EL8), which ships disabled. EPEL alone is not enough.
+    - name: Find a disabled CRB/PowerTools repository (RedHat/Fedora)
+      shell: |
+        dnf repolist --all 2>/dev/null \
+          | awk '$NF == "disabled" && ($1 == "crb" || $1 == "powertools") { print $1 }' \
+          | head -1
+      register: crb_repolist
+      changed_when: false
+      failed_when: false
+      check_mode: no
+      when: ansible_os_family == 'RedHat'
+
+    - name: Set CRB/PowerTools repository fact
+      set_fact:
+        crb_repo: "{{ crb_repolist.stdout | default('', true) | trim }}"
+      when: ansible_os_family == 'RedHat'
+
+    - name: Enable the CRB/PowerTools repository (RedHat/Fedora)
+      command: dnf config-manager --set-enabled {{ crb_repo }}
+      when:
+        - ansible_os_family == 'RedHat'
+        - crb_repo | default('', true) != ''
+        - not ansible_check_mode
+
     - name: Install Neovim build dependencies (RedHat/Fedora)
-      package:
+      dnf:
         name:
           - ninja-build
           - gettext
@@ -127,10 +174,17 @@
           - unzip
           - curl
         state: present
+        # Redundant on a real run (the repository was just enabled persistently), but
+        # it keeps --check accurate on a host where CRB is still disabled.
+        enablerepo: "{{ [crb_repo] if (crb_repo | default('', true) != '') else omit }}"
+        disable_plugin: "{{ dnf_disable_plugins }}"
       when: ansible_os_family == 'RedHat' and not (use_shell_pkg | default(false) | bool)
 
     - name: Install Neovim build dependencies (RedHat/Fedora - shell fallback)
-      shell: dnf install -y ninja-build gettext cmake unzip curl
+      shell: >-
+        dnf install -y
+        {{ '--enablerepo=' + crb_repo if (crb_repo | default('', true) != '') else '' }}
+        ninja-build gettext cmake unzip curl
       when: ansible_os_family == 'RedHat' and (use_shell_pkg | default(false) | bool)
 
     # ===== Install / Update Neovim and Zellij =====

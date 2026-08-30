@@ -39,7 +39,8 @@ ansible minion20 -i hosts.ini -m shell -a "command" -b
 - **update-dev-tools.yml**: Update-only playbook for already-provisioned hosts
 - **tasks/update-tools.yml**: Version-aware install/update logic for Neovim and Zellij, imported by both playbooks
 - **tasks/zellij-config.yml**: Deploys the Zellij keybinding overrides, imported by both playbooks
-- **hosts.ini**: Inventory file with server groups (minions, other, thi, herhoffer) and a parent group `servers` that includes all
+- **tasks/user-identity.yml**: Resolves `user_name`/`user_home` from the target, imported by both playbooks
+- **hosts.ini**: Inventory file defining the `servers` group
 - **.gitconfig**: Git configuration deployed to target servers
 - **files/zellij-config.kdl**: Partial Zellij config deployed to `~/.config/zellij/config.kdl`
 
@@ -47,6 +48,18 @@ ansible minion20 -i hosts.ini -m shell -a "command" -b
 
 - Targets the `servers` host group by default (includes all child groups)
 - Uses `become: yes` for privilege escalation
+- `user_name`/`user_home` are discovered on the target (`id -un`, `$HOME`) by
+  tasks/user-identity.yml, with `become: no` so they describe the login user rather
+  than the become user. Do not reintroduce `ansible_user`: it is undefined unless the
+  inventory, ansible.cfg or `-u` sets it, and deriving the home directory from it
+  hardcodes `/home/<user>`, which is wrong for root
+- On RedHat hosts, `ninja-build` comes from the CRB repository (PowerTools on EL8),
+  which ships disabled; EPEL alone is not enough. The playbook finds and enables it
+- RedHat package tasks use the `dnf` module with `disable_plugin: needrestart` rather
+  than the generic `package` module. The needrestart dnf plugin prints a summary after
+  every *successful* transaction, which corrupts the JSON the dnf module parses and
+  fails the task even though the packages installed. `package` cannot be used because
+  it would forward `disable_plugin` to `apt` on the Debian hosts
 - Neovim is built from source (stable branch) to avoid GLIBC compatibility issues
 - Installed versions are compared against the GitHub releases API; the API is queried
   once per run via `delegate_to: localhost` + `run_once` to avoid rate limits
